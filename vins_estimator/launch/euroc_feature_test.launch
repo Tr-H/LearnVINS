@@ -1,0 +1,16 @@
+<launch>
+    <arg name="config_path1" default = "$(find feature_tracker)/../config/euroc/euroc_config_1.yaml" />
+    <arg name="config_path2" default = "$(find feature_tracker)/../config/euroc/euroc_config_2.yaml" />
+	  <arg name="vins_path" default = "$(find feature_tracker)/../config/../" />
+    
+    <node name="feature_tracker" pkg="feature_tracker" type="feature_tracker" output="screen">
+        <param name="config_file1" type="string" value="$(arg config_path1)" />
+        <param name="config_file2" type="string" value="$(arg config_path2)" />
+        <param name="vins_folder" type="string" value="$(arg vins_path)" />
+    </node>
+    <node name="combine_image" pkg="feature_tracker" type="combine_image" output="screen">
+    </node>
+
+
+
+</launch>
