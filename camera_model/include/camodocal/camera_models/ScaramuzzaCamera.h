@@ -88,6 +88,11 @@ public:
     void liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) const;
     //%output P
 
+    void _undistortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out, const cv::Matx33d& rectification_matrix = cv::Matx33d::eye()) const;
+
+    void _distortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out) const;
+
+
     // Projects 3D points to the image plane (Pi function)
     void spaceToPlane(const Eigen::Vector3d& P, Eigen::Vector2d& p) const;
     //%output p

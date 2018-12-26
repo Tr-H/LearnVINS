@@ -7,6 +7,8 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/video.hpp>
 
 #include "camodocal/gpl/gpl.h"
 
@@ -509,6 +511,67 @@ PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) cons
     P << mx_u, my_u, 1.0;
 }
 
+void
+PinholeCamera::_undistortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out, const cv::Matx33d& rectification_matrix ) const
+{
+    Parameters params = getParameters();
+
+    double u0 = params.imageWidth() / 2.0;
+    double v0 = params.imageHeight() / 2.0;
+    double mu = params.fx();
+    double mv = params.fy();
+    double k1 = params.k1();
+    double k2 = params.k2();
+    double p1 = params.p1();
+    double p2 = params.p2();
+    cv::Matx33d K(
+        mu, 0.0, u0, 
+        0.0, mv, v0, 
+        0.0, 0.0, 1.0);
+    cv::Matx33d K_new(
+        1.0, 0.0, 0.0, 
+        0.0, 1.0, 0.0, 
+        0.0, 0.0, 1.0);
+    cv::Vec4d distortion_coeffs(k1, k2, p1, p2);
+    if (cam_distortion_model == "radtan") {
+        cv::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+    } else if (cam_distortion_model == "equidistant") {
+        cv::fisheye::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+    } else {
+        cv::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+    }
+}
+
+void
+PinholeCamera::_distortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out) const
+{
+    Parameters params = getParameters();
+
+    double u0 = params.imageWidth() / 2.0;
+    double v0 = params.imageHeight() / 2.0;
+    double mu = params.fx();
+    double mv = params.fy();
+    double k1 = params.k1();
+    double k2 = params.k2();
+    double p1 = params.p1();
+    double p2 = params.p2();
+    cv::Matx33d K(
+        mu, 0.0, u0, 
+        0.0, mv, v0, 
+        0.0, 0.0, 1.0);
+    cv::Vec4d distortion_coeffs(k1, k2, p1, p2);
+    if (cam_distortion_model == "radtan") {
+        std::vector<cv::Point3f> homogenous_pts;
+        cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
+        cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, distortion_coeffs, pts_out);
+    } else if (cam_distortion_model == "equidistant") {
+        cv::fisheye::distortPoints(pts_in, pts_out, K, distortion_coeffs);
+    } else {
+        std::vector<cv::Point3f> homogenous_pts;
+        cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
+        cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, distortion_coeffs, pts_out);
+    }
+}
 
 /**
  * \brief Project a 3D point (\a x,\a y,\a z) to the image plane in (\a u,\a v)

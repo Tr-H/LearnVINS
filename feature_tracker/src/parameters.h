@@ -22,6 +22,9 @@ extern int STEREO_TRACK;
 extern int EQUALIZE;
 extern int FISHEYE;
 extern bool PUB_THIS_FRAME;
+extern cv::Mat cv_R, cv_T;
+extern std::string DISTORTION_MODEL;
+
 
 void readParameters(ros::NodeHandle &n);
 void readParameters1(ros::NodeHandle &n);

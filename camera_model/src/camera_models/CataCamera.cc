@@ -625,6 +625,11 @@ CataCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) const
     }
 }
 
+void
+CataCamera::_undistortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out, const cv::Matx33d& rectification_matrix ) const {}
+
+void
+CataCamera::_distortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out) const {}
 
 /** 
  * \brief Project a 3D point (\a x,\a y,\a z) to the image plane in (\a u,\a v)

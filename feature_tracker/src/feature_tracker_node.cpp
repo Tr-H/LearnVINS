@@ -83,15 +83,12 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ROS_DEBUG("processing camera %d", i);
-        // ??????
-        if (i != 1 || !STEREO_TRACK)
+        if (i != 1 || !STEREO_TRACK) {
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), img_msg->header.stamp.toSec());
-        else
-        {
+        } else {
             if (EQUALIZE)
             {
-                ROS_INFO("HELLO");
-                cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+                cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
                 clahe->apply(ptr->image.rowRange(ROW * i, ROW * (i + 1)), trackerData[i].cur_img);
             }
             else
@@ -108,37 +105,76 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         pub_count++;
         r_status.clear();
         r_err.clear();
-        TicToc t_o;
-        cv::calcOpticalFlowPyrLK(trackerData[0].cur_img, trackerData[1].cur_img, trackerData[0].cur_pts, trackerData[1].cur_pts, r_status, r_err, cv::Size(21, 21), 3);
-        ROS_DEBUG("spatial optical flow costs: %fms", t_o.toc()); 
-        vector<cv::Point2f> ll, rr;
+//         TicToc t_o;
+//         cv::calcOpticalFlowPyrLK(trackerData[0].cur_img, trackerData[1].cur_img, trackerData[0].cur_pts, trackerData[1].cur_pts, r_status, r_err, cv::Size(21, 21), 3);
+//         ROS_DEBUG("spatial optical flow costs: %fms", t_o.toc()); 
+                
+//         vector<cv::Point2f> ll, rr;
+//         vector<int> idx;
+//         for (unsigned int i = 0; i < r_status.size(); i++)  
+//         {
+//             if (r_status[i] && !inBorder(trackerData[1].cur_pts[i]))   
+//                 r_status[i] = 0;
+
+//             if (r_status[i])
+//             {
+// // ????
+//                 idx.push_back(i);
+//                 Eigen::Vector3d tmp_p;
+//                 trackerData[0].m_camera->liftProjective(Eigen::Vector2d(trackerData[0].cur_pts[i].x, trackerData[0].cur_pts[i].y), tmp_p);
+//                 tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+//                 tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+//                 ll.push_back(cv::Point2f(tmp_p.x(), tmp_p.y()));
+
+//                 trackerData[1].m_camera->liftProjective(Eigen::Vector2d(trackerData[1].cur_pts[i].x, trackerData[1].cur_pts[i].y), tmp_p);
+//                 tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+//                 tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+//                 rr.push_back(cv::Point2f(tmp_p.x(), tmp_p.y()));
+//             }
+//         }
+//         if (ll.size() >= 8)
+//         {
+//             vector<uchar> status;
+//             TicToc t_f;
+//             cv::findFundamentalMat(ll, rr, cv::FM_RANSAC, 1.0, 0.5, status);
+//             ROS_DEBUG("find f cost: %f", t_f.toc());
+//             int r_cnt = 0;
+//             for (unsigned int i = 0; i < status.size(); i++)
+//             {
+//                 if (status[i] == 0)
+//                     r_status[idx[i]] = 0;
+//                 r_cnt += r_status[idx[i]];
+//             }
+//             ROS_INFO("NUM_cam1_pts: %d", r_cnt); // 88
+//         }
+        std::vector<cv::Point2f> cam1_pts_undistorted, cam1_pts_distorted;
+        // 像素坐标转归一化平面坐标
+        trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, cam1_pts_undistorted, cv_R);
+        trackerData[1].m_camera->_distortPoints(cam1_pts_undistorted, DISTORTION_MODEL, cam1_pts_distorted);
+
+        cv::calcOpticalFlowPyrLK(trackerData[0].cur_img, trackerData[1].cur_img, trackerData[0].cur_pts, cam1_pts_distorted, r_status, r_err, cv::Size(21, 21), 3);
+        trackerData[1].cur_pts = cam1_pts_distorted;
+
         vector<int> idx;
+        std::vector<cv::Point2f> ll, rr;
         for (unsigned int i = 0; i < r_status.size(); i++)  
         {
-            if (!inBorder(trackerData[1].cur_pts[i]))   
+            if (r_status[i] && !inBorder(trackerData[1].cur_pts[i]))   
                 r_status[i] = 0;
 
             if (r_status[i])
             {
                 idx.push_back(i);
-                Eigen::Vector3d tmp_p;
-                trackerData[0].m_camera->liftProjective(Eigen::Vector2d(trackerData[0].cur_pts[i].x, trackerData[0].cur_pts[i].y), tmp_p);
-                tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
-                tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
-                ll.push_back(cv::Point2f(tmp_p.x(), tmp_p.y()));
-
-                trackerData[1].m_camera->liftProjective(Eigen::Vector2d(trackerData[1].cur_pts[i].x, trackerData[1].cur_pts[i].y), tmp_p);
-                tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
-                tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
-                rr.push_back(cv::Point2f(tmp_p.x(), tmp_p.y()));
             }
         }
+        trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, ll);
+        trackerData[1].m_camera->_undistortPoints(trackerData[1].cur_pts, DISTORTION_MODEL, rr);
+        reduceVector(ll, r_status);
+        reduceVector(rr, r_status);
         if (ll.size() >= 8)
         {
             vector<uchar> status;
-            TicToc t_f;
             cv::findFundamentalMat(ll, rr, cv::FM_RANSAC, 1.0, 0.5, status);
-            ROS_DEBUG("find f cost: %f", t_f.toc());
             int r_cnt = 0;
             for (unsigned int i = 0; i < status.size(); i++)
             {
@@ -146,18 +182,30 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     r_status[idx[i]] = 0;
                 r_cnt += r_status[idx[i]];
             }
+            ROS_INFO("NUM_cam1_pts: %d", r_cnt); // 88
         }
+
+
+        
     }
 
     for (unsigned int i = 0;; i++)
     {
         bool completed = false;
-        for (int j = 0; j < NUM_OF_CAM; j++)
+        for (int j = 0; j < 1; j++)
             if (j != 1 || !STEREO_TRACK)
                 completed |= trackerData[j].updateID(i);
         if (!completed)
             break;
     }
+    trackerData[1].ids = trackerData[0].ids;
+    trackerData[1].track_cnt = trackerData[0].track_cnt;
+
+    reduceVector(trackerData[1].cur_pts, r_status);
+    reduceVector(trackerData[1].ids, r_status);
+    reduceVector(trackerData[1].track_cnt, r_status);
+
+
 
    if (PUB_THIS_FRAME)
    {
@@ -172,8 +220,10 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         feature_points->header = img_msg->header;
         feature_points->header.frame_id = "world";
 
-        vector<set<int>> hash_ids(NUM_OF_CAM);
-        for (int i = 0; i < NUM_OF_CAM; i++)
+        // vector<set<int>> hash_ids(NUM_OF_CAM);
+        vector<set<int>> hash_ids(1);
+        // for (int i = 0; i < NUM_OF_CAM; i++)
+        for (int i = 0; i < 1; i++)
         {
             if (i != 1 || !STEREO_TRACK) {
                 auto &un_pts = trackerData[i].cur_un_pts;
@@ -186,6 +236,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     {
                         int p_id = ids[j];
                         hash_ids[i].insert(p_id);
+                        // ROS_INFO("cam0_num_feature_pts, %d", hash_ids[i].size());
                         geometry_msgs::Point32 p;
                         p.x = un_pts[j].x;
                         p.y = un_pts[j].y;
@@ -199,10 +250,13 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                         velocity_y_of_point.values.push_back(pts_velocity[j].y);
                     }
                 }
-            } else if (STEREO_TRACK) {
+            // } else if (STEREO_TRACK) {
+            } else if (0) {
                 auto &r_un_pts = trackerData[1].cur_un_pts;
                 auto &ids = trackerData[0].ids; 
+                ROS_INFO("HELLO5: %d", trackerData[1].cur_un_pts.size());
                 for (unsigned int j = 0; j < ids.size(); j++) {
+                    ROS_INFO("HELLO6: %d %d", ids.size(), r_status.size()); // 150 150
                     if (r_status[j]) {
                         int p_id = ids[j];
                         hash_ids[i].insert(p_id);
@@ -240,7 +294,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             for (int i = 0; i < NUM_OF_CAM; i++)
             {
                 cv::Mat tmp_img = stereo_img.rowRange(i * ROW, (i + 1) * ROW);
-                cv::cvtColor(show_img, tmp_img, CV_GRAY2RGB);
+                // cv::cvtColor(show_img, tmp_img, CV_GRAY2RGB);
 
                 for (unsigned int j = 0; j < trackerData[i].cur_pts.size(); j++)
                 {
@@ -273,8 +327,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 }
             }
             //cv::imshow("vis", stereo_img);
-            //cv::waitKey(5);
-            pub_match.publish(ptr->toImageMsg());
+            //cv::waitKey(5)
+            sensor_msgs::ImageConstPtr combine_image_ros_msg = cv_bridge::CvImage(img_msg->header, sensor_msgs::image_encodings::BGR8, stereo_img).toImageMsg();;
+            pub_match.publish(combine_image_ros_msg);
         }
     }
     ROS_INFO("whole feature tracker processing costs: %f", t_r.toc());

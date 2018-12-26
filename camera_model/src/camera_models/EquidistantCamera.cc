@@ -8,6 +8,8 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/video.hpp>
 
 #include "camodocal/gpl/gpl.h"
 
@@ -429,6 +431,7 @@ EquidistantCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) 
 {
     // Lift points to normalised plane
     Eigen::Vector2d p_u;
+    // p_u  X/Z   Y/Z
     p_u << m_inv_K11 * p(0) + m_inv_K13,
            m_inv_K22 * p(1) + m_inv_K23;
 
@@ -439,6 +442,68 @@ EquidistantCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) 
     P(0) = sin(theta) * cos(phi);
     P(1) = sin(theta) * sin(phi);
     P(2) = cos(theta);
+}
+
+void
+EquidistantCamera::_undistortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out, const cv::Matx33d& rectification_matrix ) const 
+{
+    Parameters params = getParameters();
+
+    double u0 = params.imageWidth() / 2.0;
+    double v0 = params.imageHeight() / 2.0;
+    double mu = params.mu();
+    double mv = params.mv();
+    double k2 = params.k2();
+    double k3 = params.k3();
+    double k4 = params.k4();
+    double k5 = params.k5();
+    cv::Matx33d K(
+        mu, 0.0, u0, 
+        0.0, mv, v0, 
+        0.0, 0.0, 1.0);
+    cv::Matx33d K_new(
+        1.0, 0.0, 1.0, 
+        0.0, 0.0, 0.0, 
+        0.0, 0.0, 1.0);
+    cv::Vec4d distortion_coeffs(k2, k3, k4, k5);
+    if (cam_distortion_model == "radtan") {
+        cv::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+    } else if (cam_distortion_model == "equidistant") {
+        cv::fisheye::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+    } else {
+        cv::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+    }
+}
+
+void
+EquidistantCamera::_distortPoints(const std::vector<cv::Point2f>& pts_in, const std::string& cam_distortion_model, std::vector<cv::Point2f>& pts_out) const
+{
+    Parameters params = getParameters();
+
+    double u0 = params.imageWidth() / 2.0;
+    double v0 = params.imageHeight() / 2.0;
+    double mu = params.mu();
+    double mv = params.mv();
+    double k2 = params.k2();
+    double k3 = params.k3();
+    double k4 = params.k4();
+    double k5 = params.k5();
+    cv::Matx33d K(
+        mu, 0.0, u0, 
+        0.0, mv, v0, 
+        0.0, 0.0, 1.0);
+    cv::Vec4d distortion_coeffs(k2, k3, k4, k5);
+    if (cam_distortion_model == "radtan") {
+        std::vector<cv::Point3f> homogenous_pts;
+        cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
+        cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, distortion_coeffs, pts_out);
+    } else if (cam_distortion_model == "equidistant") {
+        cv::fisheye::distortPoints(pts_in, pts_out, K, distortion_coeffs);
+    } else {
+        std::vector<cv::Point3f> homogenous_pts;
+        cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
+        cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, distortion_coeffs, pts_out);
+    }
 }
 
 /** 

@@ -17,6 +17,8 @@ int COL;
 int FOCAL_LENGTH;
 int FISHEYE;
 bool PUB_THIS_FRAME;
+cv::Mat cv_R, cv_T;
+std::string DISTORTION_MODEL;
 
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)
@@ -98,6 +100,17 @@ void readParameters1(ros::NodeHandle &n)
     if (FISHEYE == 1)
         FISHEYE_MASK = VINS_FOLDER_PATH + "config/fisheye_mask.jpg";
     CAM_NAMES.push_back(config_file);
+    
+    fsSettings["rectification_rotation"] >> cv_R;
+    fsSettings["rectification_translation"] >> cv_T;
+    fsSettings["distortion_model"] >> DISTORTION_MODEL;
+    // Eigen::Matrix3d eigen_R;
+    // Eigen::Vector3d eigen_T;
+    // cv::cv2eigen(cv_R, eigen_R);
+    // cv::cv2eigen(cv_T, eigen_T);
+    // Eigen::Quaterniond Q(eigen_R);
+    // eigen_R = Q.normalized();
+
 
     WINDOW_SIZE = 20;
     STEREO_TRACK = true; //false;
@@ -137,6 +150,10 @@ void readParameters2(ros::NodeHandle &n)
     if (FISHEYE == 1)
         FISHEYE_MASK = VINS_FOLDER_PATH + "config/fisheye_mask.jpg";
     CAM_NAMES.push_back(config_file);
+
+    fsSettings["extrinsicRotation"] >> cv_R;
+    fsSettings["extrinsicTranslation"] >> cv_T;
+    fsSettings["distortion_model"] >> DISTORTION_MODEL;
 
     WINDOW_SIZE = 20;
     STEREO_TRACK = true; //false;
