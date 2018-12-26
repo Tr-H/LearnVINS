@@ -151,8 +151,8 @@ void readParameters2(ros::NodeHandle &n)
         FISHEYE_MASK = VINS_FOLDER_PATH + "config/fisheye_mask.jpg";
     CAM_NAMES.push_back(config_file);
 
-    fsSettings["extrinsicRotation"] >> cv_R;
-    fsSettings["extrinsicTranslation"] >> cv_T;
+    fsSettings["rectification_rotation"] >> cv_R;
+    fsSettings["rectification_translation"] >> cv_T;
     fsSettings["distortion_model"] >> DISTORTION_MODEL;
 
     WINDOW_SIZE = 20;

@@ -149,10 +149,12 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 //         }
         std::vector<cv::Point2f> cam1_pts_undistorted, cam1_pts_distorted;
         // 像素坐标转归一化平面坐标
+        std::cout << cv_R << std::endl;
         trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, cam1_pts_undistorted, cv_R);
         trackerData[1].m_camera->_distortPoints(cam1_pts_undistorted, DISTORTION_MODEL, cam1_pts_distorted);
 
-        cv::calcOpticalFlowPyrLK(trackerData[0].cur_img, trackerData[1].cur_img, trackerData[0].cur_pts, cam1_pts_distorted, r_status, r_err, cv::Size(21, 21), 3);
+        cv::calcOpticalFlowPyrLK(trackerData[0].cur_img, trackerData[1].cur_img, trackerData[0].cur_pts, cam1_pts_distorted, r_status, r_err, 
+                                 cv::Size(21, 21), 3, cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01), cv::OPTFLOW_USE_INITIAL_FLOW);
         trackerData[1].cur_pts = cam1_pts_distorted;
 
         vector<int> idx;
@@ -167,6 +169,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 idx.push_back(i);
             }
         }
+        ROS_INFO("NUM_cam1_points: %d", idx.size()); 
         trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, ll);
         trackerData[1].m_camera->_undistortPoints(trackerData[1].cur_pts, DISTORTION_MODEL, rr);
         reduceVector(ll, r_status);
@@ -182,11 +185,8 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     r_status[idx[i]] = 0;
                 r_cnt += r_status[idx[i]];
             }
-            ROS_INFO("NUM_cam1_pts: %d", r_cnt); // 88
+            ROS_INFO("NUM_cam1_RANSAC: %d", r_cnt); // 88
         }
-
-
-        
     }
 
     for (unsigned int i = 0;; i++)
