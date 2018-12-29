@@ -19,6 +19,9 @@ ros::Publisher pub_img,pub_match;
 ros::Publisher pub_restart;
 
 FeatureTracker trackerData[NUM_OF_CAM];
+std::vector<cv::Mat> prev_cam0_pyramid;
+std::vector<cv::Mat> curr_cam0_pyramid;
+std::vector<cv::Mat> curr_cam1_pyramid;
 // FeatureTracker trackerData[2];
 double first_image_time;
 int pub_count = 1;
@@ -100,6 +103,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 #endif
     }
 
+    cv::buildOpticalFlowPyramid(trackerData[0].cur_img, curr_cam0_pyramid, cv::Size(21, 21), 3, true, 4, 0, false);
+    cv::buildOpticalFlowPyramid(trackerData[1].cur_img, curr_cam1_pyramid, cv::Size(21, 21), 3, true, 4, 0, false);
+
     if ( PUB_THIS_FRAME && STEREO_TRACK && trackerData[0].cur_pts.size() > 0)
     {
         pub_count++;
@@ -149,16 +155,67 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 //         }
         std::vector<cv::Point2f> cam1_pts_undistorted, cam1_pts_distorted;
         // 像素坐标转归一化平面坐标
-        std::cout << cv_R << std::endl;
         trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, cam1_pts_undistorted, cv_R);
         trackerData[1].m_camera->_distortPoints(cam1_pts_undistorted, DISTORTION_MODEL, cam1_pts_distorted);
 
-        cv::calcOpticalFlowPyrLK(trackerData[0].cur_img, trackerData[1].cur_img, trackerData[0].cur_pts, cam1_pts_distorted, r_status, r_err, 
+        cv::calcOpticalFlowPyrLK(curr_cam0_pyramid, curr_cam1_pyramid, trackerData[0].cur_pts, cam1_pts_distorted, r_status, r_err, 
                                  cv::Size(21, 21), 3, cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01), cv::OPTFLOW_USE_INITIAL_FLOW);
         trackerData[1].cur_pts = cam1_pts_distorted;
 
+        // 用归一化坐标求F
         vector<int> idx;
         std::vector<cv::Point2f> ll, rr;
+        trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, ll);
+        trackerData[1].m_camera->_undistortPoints(trackerData[1].cur_pts, DISTORTION_MODEL, rr);
+
+        // for (unsigned int i = 0; i < r_status.size(); i++)  
+        // {
+        //     if (r_status[i] && !inBorder(trackerData[1].cur_pts[i]))   
+        //         r_status[i] = 0;
+
+        //     if (r_status[i])
+        //     {
+        //         idx.push_back(i);
+        //         // std::cout << trackerData[0].cur_pts[i] << trackerData[1].cur_pts[i] << trackerData[0].ids[i] << std::endl;
+        //         // std::cout << ll[i] << rr[i] << trackerData[0].ids[i] << std::endl;
+        //     }
+        // }
+        // ROS_INFO("NUM_cam1_points: %d", idx.size()); 
+
+        // reduceVector(ll, r_status);
+        // reduceVector(rr, r_status);
+        // if (ll.size() >= 8)
+        // {
+        //     vector<uchar> status;
+        //     cv::Mat Fundamental_mat;
+        //     Fundamental_mat = cv::findFundamentalMat(ll, rr, cv::FM_RANSAC, 0.06, 0.5, status);
+        //     // std::cout << Fundamental_mat << std::endl;
+        //     int r_cnt = 0;
+        //     for (unsigned int i = 0; i < status.size(); i++)
+        //     {
+        //         if (status[i] == 0)
+        //             r_status[idx[i]] = 0;
+        //         r_cnt += r_status[idx[i]];
+        //     }
+        //     ROS_INFO("NUM_cam1_RANSAC: %d", r_cnt); // 88
+        // }
+
+        // Compute the essential matrix
+        const cv::Matx33d R_cam0_cam1 = cv_R;
+        const cv::Matx33d t_cam0_cam1_hat(
+            0.0, -cv_T.at<double>(2, 0), cv_T.at<double>(1, 0),
+            cv_T.at<double>(2, 0), 0.0, -cv_T.at<double>(0, 0),
+            -cv_T.at<double>(1, 0), cv_T.at<double>(0, 0), 0.0);
+        const cv::Matx33d E = t_cam0_cam1_hat * R_cam0_cam1;
+        // std::cout << "E: " << E << std::endl;
+
+        std::vector<double> params_vec0, params_vec1;
+        trackerData[0].m_camera->writeParameters(params_vec0);
+        trackerData[1].m_camera->writeParameters(params_vec1);
+        double norm_pixel_unit = 4.0 / (params_vec0[4] + params_vec0[5] + params_vec1[4] + params_vec1[5]);
+        // std::cout << "norm: " << norm_pixel_unit << std::endl;
+
+        int r_cnt = 0;
         for (unsigned int i = 0; i < r_status.size(); i++)  
         {
             if (r_status[i] && !inBorder(trackerData[1].cur_pts[i]))   
@@ -167,26 +224,28 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             if (r_status[i])
             {
                 idx.push_back(i);
+                // std::cout << "ll: " << ll[i] << std::endl;
+                cv::Vec3d pt0(ll[i].x, ll[i].y, 1.0);
+                cv::Vec3d pt1(rr[i].x, rr[i].y, 1.0);
+                cv::Vec3d epipolar_line = E * pt0;
+                double error = fabs((pt1.t() * epipolar_line)[0]) / sqrt(
+                    epipolar_line[0] * epipolar_line[0] + epipolar_line[1] * epipolar_line[1]);
+                // std::cout << "error: " << error << std::endl;
+                if (error > 13 * norm_pixel_unit) {
+                    r_status[i] = 0;
+                }
+                r_cnt += r_status[i];
+                // std::cout << trackerData[0].cur_pts[i] << trackerData[1].cur_pts[i] << trackerData[0].ids[i] << std::endl;
+                // std::cout << ll[i] << rr[i] << trackerData[0].ids[i] << std::endl;
             }
         }
-        ROS_INFO("NUM_cam1_points: %d", idx.size()); 
-        trackerData[0].m_camera->_undistortPoints(trackerData[0].cur_pts, DISTORTION_MODEL, ll);
-        trackerData[1].m_camera->_undistortPoints(trackerData[1].cur_pts, DISTORTION_MODEL, rr);
         reduceVector(ll, r_status);
         reduceVector(rr, r_status);
-        if (ll.size() >= 8)
-        {
-            vector<uchar> status;
-            cv::findFundamentalMat(ll, rr, cv::FM_RANSAC, 1.0, 0.5, status);
-            int r_cnt = 0;
-            for (unsigned int i = 0; i < status.size(); i++)
-            {
-                if (status[i] == 0)
-                    r_status[idx[i]] = 0;
-                r_cnt += r_status[idx[i]];
-            }
-            ROS_INFO("NUM_cam1_RANSAC: %d", r_cnt); // 88
-        }
+        ROS_INFO("NUM_cam1_points: %d", idx.size()); 
+        ROS_INFO("NUM_cam1_RANSAC: %d", r_cnt);
+
+
+
     }
 
     for (unsigned int i = 0;; i++)

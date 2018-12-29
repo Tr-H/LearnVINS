@@ -12,15 +12,15 @@ image_width: 752
 image_height: 480
 distortion_model: radtan
 distortion_parameters:
-   k1: -2.917e-01
-   k2: 8.228e-02
-   p1: 5.333e-05
-   p2: -1.578e-04
+   k1: -0.28340811
+   k2: 0.07395907 
+   p1: 0.00019359 
+   p2: 1.76187114e-05
 projection_parameters:
-   fx: 4.616e+02
-   fy: 4.603e+02
-   cx: 3.630e+02
-   cy: 2.481e+02
+   fx: 4.58654e+02
+   fy: 4.57296e+02
+   cx: 3.67215e+02
+   cy: 2.48375e+02
 
 # Extrinsic parameter between IMU and Camera.
 estimate_extrinsic: 0   # 0  Have an accurate extrinsic parameters. We will trust the following imu^R_cam, imu^T_cam, don't change it.

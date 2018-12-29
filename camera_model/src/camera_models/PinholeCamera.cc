@@ -559,7 +559,9 @@ PinholeCamera::_distortPoints(const std::vector<cv::Point2f>& pts_in, const std:
         mu, 0.0, u0, 
         0.0, mv, v0, 
         0.0, 0.0, 1.0);
+    // std::cout << "K: " << K << std::endl;
     cv::Vec4d distortion_coeffs(k1, k2, p1, p2);
+    // std::cout << "distortion: " << distortion_coeffs << std::endl;
     if (cam_distortion_model == "radtan") {
         std::vector<cv::Point3f> homogenous_pts;
         cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
